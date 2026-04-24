@@ -1,16 +1,22 @@
 ---
-name: gherkin
-description: Behavior-spec authoring and refinement for Behavioral Spec Driven Development. Produces Gherkin-style `.feature.md` specs alongside a decision record. Invoked by Spezi's router; not typically called directly.
+name: spezi-gherkin
+description: Dialogical spec authoring for Behavioral Spec Driven Development. Runs elicit and distill sessions to produce `.feature.md` specs alongside a decision record. Invoked by Spezi — not directly. Allium orchestration (when to invoke Allium, linking schema, decline memory) lives in the Spezi meta-skill, not here.
 ---
 
-# Gherkin Sub-skill
+# spezi-gherkin
 
 ## Purpose
 
-Author and maintain behavior specs in a markdown-embedded Gherkin style.
-The sub-skill is a workshop, not a generator: it refuses to invent
-behavior on the user's behalf and confirms every non-trivial decision
-before persisting it.
+Author and maintain behaviour specs in a markdown-embedded Gherkin
+style. The sub-skill is a workshop, not a generator: it refuses to
+invent behaviour on the user's behalf and confirms every non-trivial
+decision before persisting it.
+
+The sub-skill is harness-agnostic and contains no Allium logic. It
+receives `{ mode, seed }` from Spezi, runs its session, writes its
+artifacts to disk, and exits. Spezi inspects the result and decides
+what happens next (including any Allium hook) — see
+`spezi/core/allium.md`.
 
 ## Modes
 
@@ -18,15 +24,11 @@ before persisting it.
 |------|--------|---------|
 | `elicit` | **Specified below** | Interactive session to produce a new `.feature.md` from a seed idea. |
 | `distill` | **Specified below** | Tighten or restructure an existing `.feature.md` — draft-first, then grouped flags. |
-| `read` | Specified in `spezi/tdd/SKILL.md` | Read-only reference for a spec. Gherkin-only target. |
-| `red` / `green` | Specified in `spezi/tdd/SKILL.md` | TDD phases. Gherkin supplies the spec and alignment analysis; Allium handles tests. |
-| `refactor` | Deferred | TDD-cycle refactor operations over specs and implementation. |
 
-A conforming implementation of this file must not silently run deferred
-modes — if the router passes one, respond with "not yet implemented."
-The TDD modes defer their cross-sub-skill protocol to
-`spezi/tdd/SKILL.md`; Gherkin's Allium-linking rules and full-section
-rewrite rule are honored unchanged by that protocol.
+TDD phase modes (`--read`, `--red`, `--green`, `--refactor`) are
+specified in the sibling `spezi-tdd` skill, not here. Spezi routes
+those flags to `spezi-tdd` directly; this sub-skill is not invoked
+for them.
 
 ## Shared concerns
 
@@ -146,110 +148,39 @@ or on `/abort`. The sub-skill does not maintain a sidecar session log
 beyond the decision record. Resumption across sessions is out of scope
 for this step.
 
-### Router flag interpretation
+### Linking behaviour
 
-The sub-skill receives the `ParsedInvocation` alongside the routed
-mode. From the sub-skill's point of view, three parser flags matter
-for its own behavior (everything else is a routing concern):
+The schema of the front-matter `allium` block, the round-trip
+back-reference contract, and everything about *when* Allium gets
+invoked belong to Spezi — see `spezi/core/allium.md`. This
+sub-skill only defines how Gherkin operations *read and write* that
+block.
 
-| Flag observed | Effect inside Gherkin |
-|---------------|-----------------------|
-| `--gherkin` explicit | Gherkin-only intent. Suppress the Allium assessment hook entirely. Existing `allium` references in the feature file are still surfaced and respected (e.g. flagged as stale in distill), but no suggestion to invoke Allium is made. |
-| `--both` explicit | Gherkin runs normally. The Allium assessment hook is suppressed because the router has already dispatched to Allium; Gherkin instead emits a non-prompting *handoff signal* on completion (see *Allium assessment hook*). |
-| `--allium` explicit | Not reachable here — the router would not route to Gherkin. If somehow received, treat as a bug and refuse to proceed. |
-| None of the above | Default. The Allium assessment hook may fire per its own rules. |
+- **Elicit.** A fresh `.feature.md` is created with no `allium`
+  block. If the user's declared scope includes an existing Allium
+  file (supplied as a scope answer), the field is created with
+  `status: pending` and `linkedAt: now` — no further action.
+- **Elicit replace.** When the user explicitly replaces an existing
+  `.feature.md` during Scope confirmation, any existing `allium`
+  entries are **preserved verbatim** and each entry's `status` is
+  coerced to `stale` (the prior links may be out of date relative
+  to the new content). Never drop entries silently.
+- **Distill.** Each `allium` entry whose `linkedAt` is older than
+  the feature file's `updated` timestamp is flagged to the user as a
+  meaning-changing observation (same grouped-flag pattern as any
+  other distill observation). Accepted flags may change the entry's
+  `status` (e.g. to `stale`) or remove the entry; rejected flags
+  leave it as-is. Gherkin never unilaterally edits or deletes an
+  entry.
+- **Never.** Gherkin never reads, writes, or deletes `.allium`
+  files. If an Allium-side edit is appropriate, it is Spezi's or
+  Allium's concern — see `spezi/core/allium.md` §Allium-side
+  reconciliation.
 
-These overrides only affect the Allium-facing surface. They do not
-change the four-phase elicit flow, the distill draft-first flow,
-the ambiguity pattern, or any output format.
-
-### Allium assessment hook
-
-The hook is the moment the Gherkin sub-skill pauses and asks whether
-Allium should be brought in. It is a *suggestion*, not a handoff;
-the user opts in.
-
-**When it fires.** The hook is evaluated at exactly one point per
-mode and fires at most once per session:
-
-- Elicit — immediately after the Wrap-up final confirmation, before
-  finalizing the decision record's `Outcome` field.
-- Distill — immediately after the final `confirm` of the distilled
-  document, before writing the decision record.
-
-It never fires at mid-session points (phase transitions, draft
-reveals, ambiguity resolutions), on `/abort`, on draft-outcome
-endings, or when the feature file ends without a `Scenario:` block.
-
-**Gating conditions (all must hold).** If any fails, the hook is
-silent and the session completes normally.
-
-1. The routing environment reports `alliumAvailable == true`.
-2. The parsed flags do not contain `--gherkin` or `--both`.
-3. The user has not declined Allium earlier in this session (see
-   *Decline memory*).
-4. The feature file has at least one `Scenario:` block.
-
-**Hook prompt shape.**
-
-```
-Allium assessment: Allium is available and this spec is ready for
-handoff. Invoke Allium now to <one-line role summary>?
-
-Reply `yes` / `not now` / `never this session`.
-```
-
-The one-line role summary comes from the adapter's
-`describeAllium()` when present, otherwise falls back to
-`"continue with the Allium-side workflow"`. The sub-skill does not
-invent specifics.
-
-**User responses.**
-
-- `yes` → return control to Spezi with a structured handoff request:
-  `{ invoke: "allium", seed: <slug>, reason: "post-gherkin-<mode>" }`.
-  The Gherkin sub-skill does not invoke Allium directly; the router
-  does.
-- `not now` → no handoff this session; the hook does not re-fire.
-- `never this session` → same as `not now`, plus sets an in-memory
-  suppression flag. (Persistent opt-out is a config concern for a
-  later step.)
-
-Both non-`yes` responses are recorded in the decision record's
-*Session trail* as `allium-hook: declined (this session)`.
-
-**Handoff signal under `--both`.** The prompt is skipped, but the
-sub-skill still emits a non-interactive *handoff signal* on
-completion: `{ signal: "gherkin-complete", slug, featureFile }`.
-The adapter/router consumes this to sequence Allium if it is not
-already running. No user turn is added.
-
-### Decline memory
-
-Decline memory is in-memory only, scoped to the current Spezi
-invocation. A new Spezi invocation starts clean. This preserves the
-dialogical principle across time: the sub-skill asks again tomorrow,
-rather than silently remembering yesterday's "no."
-
-### Linking to Allium artifacts
-
-A `.feature.md` may declare references to Allium artifacts in its
-front matter (schema: see *File formats → `.feature.md`*). The
-Gherkin sub-skill's contract with Allium files is:
-
-- **Structure is canonical in the feature file.** Allium files mirror
-  the reference; they do not override it.
-- **Round-trip.** Each linked Allium file *should* carry a `gherkin`
-  back-reference (path + timestamp). Gherkin produces its own link
-  with enough information for Allium to round-trip it, but does not
-  enforce Allium's shape.
-- **Staleness.** A reference is *stale* when the feature file's
-  `updated` timestamp is newer than the reference's `linkedAt`.
-  Distill detects and flags staleness; elicit preserves stale entries
-  across a confirmed replace rather than silently dropping them.
-- **No silent writes.** Gherkin never edits Allium files. It may flag
-  missing-file, mismatched-slug, or stale references; reconciliation
-  is Allium's job (typically through a follow-up `--both` run).
+The Allium assessment hook (when to suggest invoking Allium after a
+successful session) is fully external to this sub-skill. Gherkin
+writes `status: complete` on successful elicit Wrap-up or distill
+Confirm, and that is the only handshake Spezi needs.
 
 ## Elicit mode
 
@@ -661,25 +592,11 @@ Rules:
 - `updated` is refreshed on every successful write (elicit
   confirmations and distill confirms). `created` is written once.
 
-**`allium` block — reference field format.**
-
-The `allium` key holds an ordered list of references. Each entry is
-an object with the following fields:
-
-| Field | Type | Required | Meaning |
-|-------|------|----------|---------|
-| `path` | relative POSIX path, string | yes | Location of the linked Allium artifact, relative to the project root. Must point inside `specs/allium/`. |
-| `kind` | enum string | yes | Role of the linked file. Canonical values: `tests` (Allium file tests this spec), `plan` (Allium-side test plan derived from this spec), `generated-from` (Allium file was generated from this spec). Unknown values are preserved verbatim for forward compatibility but may be reported at read time. |
-| `linkedAt` | ISO 8601 UTC timestamp | yes | When the link was last established or reconciled. Not necessarily the Allium file's mtime. |
-| `status` | enum string | yes | `active` — link is current. `stale` — the feature file has been updated after `linkedAt`. `pending` — the link was declared but the Allium file does not yet exist (intent, not fact). |
-
-An empty list (`allium: []`) and a missing `allium` key are
-equivalent on read. On write, prefer omitting the key when there are
-no references.
-
-The Allium-side back-reference is expected to carry a `gherkin` field
-with `path` and `updatedAt`. Gherkin reads this (if present) to
-verify round-trip integrity but does not modify it.
+The `allium` block — fields, value enumerations, and the round-trip
+back-reference contract — is defined in `spezi/core/allium.md`
+§Linking convention. This sub-skill writes that schema verbatim and
+applies the read/write rules in §Linking behaviour above; it does
+not re-specify the schema here.
 
 ### Decision record
 

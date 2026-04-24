@@ -1,27 +1,33 @@
 ---
-name: tdd
-description: TDD-phase protocol for Behavioral Spec Driven Development. Specifies `--read`, `--red`, and `--green` modes with a shared read-only enforcement contract and a single spec-update escape hatch. Invoked indirectly — the router targets Gherkin and/or Allium with these modes; this document is the cross-sub-skill agreement they both honor.
+name: spezi-tdd
+description: TDD-phase runner for Behavioral Spec Driven Development. Specifies `--read`, `--red`, and `--green` modes with a shared read-only enforcement contract and a single spec-update escape hatch. Invoked by Spezi — not directly. Alongside `spezi-gherkin`; Spezi routes to whichever skill matches the mode.
 ---
 
-# TDD Phase Protocol
+# spezi-tdd
 
-The TDD modes are **not** a separate sub-skill target. The router
-continues to dispatch to Gherkin (spec side) and Allium (execution
-side) per `spezi/core/router.md`. This document is the contract those
-sub-skills follow when invoked with a TDD-phase mode, plus the
-user-facing protocol that spans them.
+The sibling sub-skill to `spezi-gherkin`. Spezi routes the TDD-phase
+flags (`--read`, `--red`, `--green`, and later `--refactor`) here,
+passing `{ mode, seed }`. For `--red` and `--green`, Spezi additionally
+invokes Allium so tests can be generated and executed; this sub-skill
+supplies the spec-side alignment analysis and guidance, Allium does
+the execution. Neither side edits the other's artifacts.
+
+This file owns the read-only enforcement contract, the alignment
+check, the `/update-spec` escape hatch, and the TDD-specific
+extension to the decision-record schema. The base record schema is
+in `spezi-gherkin/SKILL.md` §Decision record.
 
 ## Modes
 
-| Mode | Status | Target resolution (default) | Writes any `.feature.md`? |
-|------|--------|-----------------------------|---------------------------|
-| `read` | **Specified below** | `{gherkin}` | No — read-only. `/update-spec` is the sole exception. |
-| `red` | **Specified below** | `{gherkin, allium}` | No — read-only. `/update-spec` is the sole exception. |
-| `green` | **Specified below** | `{gherkin, allium}` | No — read-only. `/update-spec` is the sole exception. |
-| `refactor` | Deferred | `{gherkin, allium}` | — |
+| Mode | Status | Gherkin-side skill | Allium involved? | Writes any `.feature.md`? |
+|------|--------|--------------------|------------------|---------------------------|
+| `read` | **Specified below** | `spezi-tdd` | No | No — read-only. `/update-spec` is the sole exception. |
+| `red` | **Specified below** | `spezi-tdd` | Yes | No — read-only. `/update-spec` is the sole exception. |
+| `green` | **Specified below** | `spezi-tdd` | Yes | No — read-only. `/update-spec` is the sole exception. |
+| `refactor` | Deferred | `spezi-tdd` | Yes | — |
 
-A conforming implementation must refuse a deferred mode with "not yet
-implemented" rather than fall back to a nearest neighbor.
+A conforming implementation must refuse a deferred mode with "not
+yet implemented" rather than fall back to a nearest neighbour.
 
 ## Read-only enforcement contract
 
@@ -188,8 +194,8 @@ side edits `.feature.md`.
 
 6. **Persist.** Write the TDD decision record. Any new test files
    land per Allium's rules (with the Allium-side back-reference to
-   the feature file — see `spezi/gherkin/SKILL.md` *Linking to
-   Allium artifacts*). No `.feature.md` write occurs outside
+   the feature file — see `spezi/core/allium.md` *Linking
+   convention*). No `.feature.md` write occurs outside
    `/update-spec`.
 
 7. **Confirm.** Final prompt: "Generated <N> tests, deferred <M>,
@@ -303,7 +309,7 @@ In either case, the next turn is the confirmation step below.
    section level* — not the whole file, unlike distill. Only the
    section(s) affected by the update are drafted. The output uses
    the same full-section-rewrite rule from
-   `spezi/gherkin/SKILL.md` *Full-section rewrite rule*: the
+   `spezi-gherkin/SKILL.md` *Full-section rewrite rule*: the
    section is rewritten in full, not patched in place.
 
 3. **Grouped flag confirmation.** Any meaning-changing aspect of

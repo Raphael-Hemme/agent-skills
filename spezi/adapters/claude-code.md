@@ -1,10 +1,10 @@
 # Claude Code Adapter
 
 This is the thin integration layer between Spezi's agent-agnostic core
-(`spezi/core/`, `spezi/gherkin/`, `spezi/tdd/`) and Claude Code's
-invocation model. Nothing here re-specifies routing, parsing, dialogue,
-or sub-skill behavior — those live in the core files and this adapter
-delegates to them.
+(`spezi/core/`) and its sibling sub-skills (`spezi-gherkin/`,
+`spezi-tdd/`) and Claude Code's invocation model. Nothing here
+re-specifies routing, parsing, dialogue, or sub-skill behaviour —
+those live in the core files and this adapter delegates to them.
 
 This file is **the only** place in Spezi that names Claude Code
 specifics. A sibling adapter for a different harness would replace it
@@ -28,10 +28,12 @@ entirely without touching the core.
 
 - Argument parsing — see `spezi/core/router.md` §1.
 - Routing decisions — see `spezi/core/router.md` §2.
-- Sub-skill behavior — see `spezi/gherkin/SKILL.md` and
-  `spezi/tdd/SKILL.md`.
+- Sub-skill behaviour — see `spezi-gherkin/SKILL.md` and
+  `spezi-tdd/SKILL.md`.
 - State file format — see `spezi/core/state.md`.
 - Gitignore handling — see `spezi/core/state.md` §Gitignore handling.
+- Allium orchestration (linking schema, assessment hook, decline
+  memory, reconciliation) — see `spezi/core/allium.md`.
 
 The adapter must not introduce new rules for any of the above. If a
 rule is missing from the core, add it to the core — not here.
@@ -117,9 +119,9 @@ trigger Allium's own initialization. Detection only.
 ### `describeAllium()` — optional
 
 When Allium is available, the adapter may return a one-line role
-summary for the assessment-hook prompt (see `spezi/gherkin/SKILL.md`
-§Allium assessment hook). If the adapter does not implement this, the
-sub-skill falls back to the generic
+summary for the assessment-hook prompt (see `spezi/core/allium.md`
+§Post-Gherkin assessment hook). If the adapter does not implement
+this, Spezi falls back to the generic
 `"continue with the Allium-side workflow"`.
 
 Recommended Claude Code implementation: read the first non-empty line
@@ -143,30 +145,37 @@ The adapter consumes the `RoutingDecision.kind` and acts:
 
 | `kind` | Action |
 |--------|--------|
-| `invoke` | For each entry in `targets`, invoke the named sub-skill with `{ mode, seed, parsed }` plus (for `allium`) any `featureFile` already fixed by a prior Gherkin pass. Ordering: Gherkin before Allium when both are listed; the `gherkin-complete` signal (see `spezi/gherkin/SKILL.md`) triggers Allium when it is present. |
+| `invoke` | For each entry in `targets`, invoke the named sub-skill with `{ mode, seed, parsed }` plus (for `allium`) any `featureFile` already fixed by a prior Gherkin pass. Ordering: the gherkin-side skill runs before Allium when both are listed. Spezi waits for the sub-skill to exit, then inspects the just-written `.feature.md` to decide whether to invoke Allium (see `spezi/core/allium.md` §Post-Gherkin assessment hook). No explicit handoff signal — the interface is implicit via disk state. |
 | `check` | Render `diagnostic` as a plain-text report; append each entry of `degradationNotices` on its own line prefixed `note:`. No sub-skill invoked. |
 | `status` | Same rendering pattern as `check`, from the cached state only. `environment.probed` is always `false`; do not re-probe here. |
 | `clarify` | Render `clarificationNeeded` as a numbered choice list with the structured reason shown inline. Await the user's next message. When it arrives, re-enter the router with an amended invocation — either the user's reply concatenated to the prior invocation, or a fresh invocation if the user rephrased wholesale. |
 
-### Invoking Gherkin
+### Invoking the gherkin-side sub-skill
 
-Gherkin is in-repo at `spezi/gherkin/SKILL.md`. Invocation means:
-load that SKILL.md, pass `{ mode, seed, parsed }`, and follow its
-flow. For `--read`, `--red`, `--green`, Gherkin delegates to
-`spezi/tdd/SKILL.md`; the adapter does nothing extra for that
-delegation.
+The router's `skill: "gherkin"` target resolves to one of two
+sibling skills, selected by mode:
+
+- `elicit`, `distill` → `spezi-gherkin/SKILL.md`
+- `read`, `red`, `green`, `refactor` → `spezi-tdd/SKILL.md`
+
+Invocation means: load the chosen SKILL.md, pass `{ mode, seed,
+parsed }`, and follow its flow. The adapter does not mix the two
+or inject logic between them.
 
 ### Invoking Allium
 
 Allium is an external plugin. Invocation means: call the registered
 Allium entry-point (slash command or plugin hook — whichever the
-detection path found) with the same `{ mode, seed }` payload. The
-adapter does not know Allium's internals and must not second-guess
-them.
+detection path found) with the `{ mode, seed, featureFile }`
+payload. The adapter does not know Allium's internals and must not
+second-guess them.
 
-Under `--both` or a post-Gherkin handoff, the adapter waits for the
-`gherkin-complete` signal (see `spezi/gherkin/SKILL.md`) before
-invoking Allium so Allium sees the freshly written feature file.
+Under `--both`, the adapter runs the gherkin-side skill to
+completion first, then invokes Allium with the just-written feature
+file. There is no explicit handoff signal — Spezi detects
+completion by the sub-skill returning control and by inspecting the
+feature file's `status` field. See `spezi/core/allium.md`
+§Post-Gherkin assessment hook for the eligibility rules.
 
 ### Degradation
 
