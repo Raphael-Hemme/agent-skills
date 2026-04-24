@@ -59,94 +59,25 @@ Examples: `"SSO login for enterprise users"` → `sso-login-for-enterprise-users
 The slug is only fixed after Scope is confirmed. Before that, the
 session has no persistent identity.
 
-### Escape hatches
+### Shared dialogical patterns
 
-The user may type one of the following at any prompt. The sub-skill
-must recognize these as control tokens, not content.
+Elicit and distill use the same escape-hatch vocabulary (`/done`,
+`/skip`, `/back`, `/abort`), the same batch Q&A shape (3–7 labeled
+questions, two-batch cap), the same ambiguity-flag presentation
+(grouped numbered list, per-context buckets), the same full-section
+rewrite rule (replace, never patch), and the same in-memory session
+contract. These are specified once in `spezi/core/patterns.md`.
 
-| Token | Meaning |
-|-------|---------|
-| `/done` | The user considers the current phase sufficient. Advance to the next phase using whatever answers exist; missing answers become open questions in the decision record. |
-| `/skip` | Skip *this specific prompt*. If given at a question batch, the sub-skill asks which question(s) to skip (by letter/number); a bare `/skip` at the start of a phase skips the whole phase and logs a gap. |
-| `/back` | Return to the previous phase. The current phase's in-progress answers are discarded; already-confirmed sections remain. The sub-skill re-opens the prior section for revision. `/back` at Scope has no prior phase — the sub-skill offers `/abort` as the alternative. |
-| `/abort` | End the session now. Persist any confirmed sections as a draft `.feature.md` with a prominent `Status: draft (aborted)` marker, and write a decision record with `Outcome: aborted`. Do not delete partial work. |
+Sub-skill narrowings:
 
-These tokens are reserved. A user who literally needs the string
-`/done` in their answer can quote it (`"/done"`). Treat any unquoted
-leading `/` token not in the table above as a typo — ask rather than
-guess.
-
-### Batch Q&A pattern
-
-Every phase begins with a **single batch** of questions. Rules:
-
-- 3–7 questions per batch. Fewer if the phase is nearly trivial; more
-  only if the user has explicitly asked to be thorough.
-- Questions are labeled (`a)`, `b)`, ...). The label becomes the user's
-  reference when using `/skip a` or when answering out of order.
-- The batch includes a closing instruction line:
-  > Answer whichever you can in any order. `/done` if we have enough;
-  > `/skip <letter>` to skip one; `/skip` alone to skip the phase.
-- After the user answers, the sub-skill may ask **one** follow-up
-  batch if critical gaps remain. Do not chain more than two batches in
-  a single phase — at that point, flag the remaining gaps as
-  ambiguities and move on.
-
-### Ambiguity flagging
-
-During a phase the sub-skill accumulates an internal **ambiguity list**
-for items that are unclear, contradictory, or under-specified. At the
-end of the phase — before proposing the section rewrite — the list is
-presented as a single grouped block:
-
-```
-Flagged for your attention ([phase]):
-1. [topic] <question as a short sentence>
-2. [topic] <question>
-3. [topic] <question>
-
-Reply with `1: <answer>`, `1: defer`, or `1: out of scope` for each.
-Multiple on one line OK. Silence = defer all.
-```
-
-The user's responses map to three buckets:
-
-- **Answered** → folded into the section rewrite.
-- **Deferred** → carried forward to the decision record under
-  *Open questions*.
-- **Out of scope** → added to *Boundaries → Out of scope* in the
-  feature file, verbatim-ish, so the exclusion is explicit.
-
-Ambiguities are re-surfaced once at Wrap-up if they are still open.
-They are never silently dropped.
-
-### Full-section rewrite rule
-
-Section updates are **replacements, never patches**. When a phase is
-confirmed, the sub-skill composes the entire section's prose from the
-accumulated answers, shows it to the user for confirmation, and on
-confirmation writes the whole section into the feature file —
-replacing whatever prior content that section held.
-
-Consequences:
-
-- A `/back` into a prior phase followed by edits may invalidate later
-  sections. When the user revises Scope or Happy path, the sub-skill
-  must re-confirm that the subsequent confirmed sections are still
-  correct — do **not** auto-edit them, and do **not** leave them
-  silently stale. Offer: "Edge cases was confirmed earlier under a
-  different Scope. Keep as-is, revise, or discard?"
-- Never hand-merge user feedback into a diff. If the user says "change
-  X to Y" after seeing a proposed section, rewrite the whole section
-  and re-present.
-
-### Session state
-
-The session is in-memory. The only durable artifacts are the feature
-file and the decision record, both written only on phase confirmation
-or on `/abort`. The sub-skill does not maintain a sidecar session log
-beyond the decision record. Resumption across sessions is out of scope
-for this step.
+- Elicit's ambiguity list uses the `answer` / `defer` / `out of scope`
+  buckets (default on silence: defer all).
+- Distill's flag list uses the `accept` / `reject` / `defer` /
+  `<amended>` buckets (default on silence: reject all).
+- Distill's `/back` from Read is a no-op synonym for `/abort` (Read
+  has no prior step).
+- Ambiguities in elicit are re-surfaced once at Wrap-up if still
+  open; they are never silently dropped.
 
 ### Linking behaviour
 
@@ -206,116 +137,26 @@ what the feature is.
 
 ### Four-phase structure
 
-Each phase follows the same shape:
+Each of Phases 1–3 follows the shape: **Open** (state goal) → **Batch**
+(3–7 questions per `patterns.md` §Batch Q&A) → optional **Follow-up
+batch** → **Flag** (present ambiguity list if non-empty) → **Propose**
+(compose the full section) → **Confirm** (explicit `yes`/`looks good`/
+`confirm`, or revision; escape hatches always usable) → **Persist**
+(full-section rewrite per `patterns.md`). Phase 4 skips Batch; it
+re-surfaces open ambiguities, shows the whole document, and writes
+the decision record.
 
-1. **Open**: state the phase's goal in one sentence.
-2. **Batch**: ask 3–7 questions.
-3. (Optional) **Follow-up batch**: one more batch if critical gaps.
-4. **Flag**: present the ambiguity list if non-empty.
-5. **Propose**: compose the full section and show it.
-6. **Confirm**: await explicit confirmation (`yes`, `looks good`,
-   `confirm`) or a revision. Escape hatches always usable here.
-7. **Persist**: on confirmation, rewrite the section in the feature
-   file and append resolved decisions to the in-memory decision log.
+| Phase | Goal | Batch topics (pick 3–7) | Section output |
+|-------|------|-------------------------|----------------|
+| 1 — Scope | Name the feature and its boundaries. | Feature name / one-line summary; primary actor; trigger; success criterion; known out-of-scope items; dependencies on prior specs; non-functional constraints. | `# <Title>` + one-paragraph prose summary + `## Boundaries` with **In scope** / **Out of scope** / **Depends on** bullets. Empty boundary list is written as `- none declared` to make the absence explicit. |
+| 2 — Happy path | Canonical success scenario(s) in Given/When/Then form. | Given (starting state); When (action); Then (outcome); pre-existing data / setup; happy-vs-edge boundary; scenario name(s). | One or more `## Scenario: <Happy path — name>` blocks with Given/When/Then/And steps. Multiple happy scenarios allowed; keep each narrow and named. |
+| 3 — Edge cases | Failure modes, alternatives, invariants. | Failure mode per happy-path step; invalid inputs; concurrency/timing/ordering; permission boundaries; invariants; explicit non-behaviors. | One `## Scenario: <Edge case — name>` block per case. Cross-scenario invariants go under a dedicated `## Invariants` block (bulleted). |
+| 4 — Wrap-up | Surface remaining ambiguities, confirm the whole document, finalize the decision record. | *(no batch)* | Re-present still-open ambiguities → show the full current feature file → ask "Confirm as-is, revise a specific section (`/back`), or `/abort`?" → on confirmation, append final decisions to the record, set `Outcome: completed`, and write. |
 
-Phase-specific content:
-
-#### Phase 1 — Scope
-
-Goal: name the feature and its boundaries.
-
-Batch topics (select 3–7):
-- Feature name / one-line summary.
-- Primary actor (end user, admin, system, external caller).
-- Trigger — what initiates the behavior.
-- Success criterion — how do we know it worked.
-- Out-of-scope items the user knows up front.
-- Dependencies or prior specs this relies on.
-- Non-functional constraints the scope hinges on (latency budget,
-  compliance, platform).
-
-Section output (in `.feature.md`):
-
-```
-# <Feature title>
-
-<One- or two-sentence prose summary. Actor, trigger, success.>
-
-## Boundaries
-
-- **In scope**: <bulleted list>
-- **Out of scope**: <bulleted list; empty list is written as "- none declared" to make the absence explicit>
-- **Depends on**: <bulleted list of prior specs or systems, or "- none">
-```
-
-Persistence: on Scope confirmation, the slug is fixed, the feature
-file is created, and the decision record is initialized.
-
-#### Phase 2 — Happy path
-
-Goal: the canonical success scenario(s) in Given/When/Then form.
-
-Batch topics:
-- Starting state (Given).
-- User/system action (When).
-- Observable outcome (Then).
-- Pre-existing data or setup assumptions.
-- Any branching that is still part of the "happy" flow vs. an edge
-  case (the boundary is the user's to decide).
-- Naming for the scenario(s).
-
-Section output:
-
-```
-## Scenario: <Happy path — short name>
-
-Given <precondition>
-And <precondition>
-When <action>
-Then <observable outcome>
-And <observable outcome>
-```
-
-Multiple happy scenarios allowed; keep them narrow and named.
-
-#### Phase 3 — Edge cases
-
-Goal: failure modes, alternatives, and invariants.
-
-Batch topics:
-- Failure modes for each step of the happy path.
-- Invalid inputs and their handling.
-- Concurrency, timing, or ordering concerns.
-- Permission / authorization boundaries.
-- Invariants that must hold across scenarios.
-- Explicit non-behaviors (things that must *not* happen).
-
-Section output: one `## Scenario: <Edge case — name>` block per case,
-in the same Given/When/Then form. Invariants that span scenarios go
-under a dedicated block:
-
-```
-## Invariants
-
-- <invariant sentence>
-- <invariant sentence>
-```
-
-#### Phase 4 — Wrap-up
-
-Goal: surface remaining ambiguities, confirm the whole document, and
-finalize the decision record.
-
-Flow:
-1. Re-present any still-open items from the running ambiguity list.
-2. Show the full current feature file.
-3. Ask: "Confirm as-is, revise a specific section (`/back`), or
-   `/abort`?"
-4. On confirmation: append any final decisions to the decision record,
-   set `Outcome: completed`, and write the record.
-
-No new batch of questions is asked in Wrap-up; the user's attention
-is on the whole document.
+Persistence: on Scope confirmation the slug is fixed, the feature file
+is created, and the decision record is initialized. Subsequent phase
+confirmations rewrite their respective sections; the decision log is
+appended in-memory and flushed at Wrap-up.
 
 ### Completion criteria
 
@@ -375,152 +216,60 @@ Resolution:
 A single loop: Read → Draft → Flag → Resolve → Redraft → Confirm.
 
 1. **Read.** Load the feature file and the most recent decision
-   record for its slug, if any. Open with a one-line synopsis:
-   > Distilling *<slug>*, last updated <date>, <N> scenarios.
-   > Ready? (`yes` / `/abort`)
-
-   `/back` at this point is a no-op synonym for `/abort` since there
-   is no prior phase.
-
+   record for its slug. Open with a one-line synopsis ("Distilling
+   *<slug>*, last updated <date>, <N> scenarios. Ready? (`yes` /
+   `/abort`)").
 2. **Draft.** Compose a revised full `.feature.md` applying only
-   *low-risk tightenings* (see *Draft guardrails*). Present the whole
-   proposed document to the user, preceded by a short "What I
-   touched" summary of categories — **not** a line diff. Example:
-   > What I touched: normalized Gherkin capitalization; split three
-   > run-on steps; refreshed `updated` timestamp; added `- none
-   > declared` to an empty *Out of scope*.
-
-3. **Flag.** Immediately after the draft, present a grouped list of
-   meaning-changing observations the sub-skill did **not** fold into
-   the draft. Same visual shape as the elicit ambiguity list:
-
-   ```
-   Flagged (not applied):
-   1. [scenario: <name>] Steps appear to cover two behaviors —
-      split into two scenarios?
-   2. [scope] "Depends on" lists `auth-v2` which has no feature file.
-      Update reference or drop?
-   3. [invariants] "Session tokens never exceed 1 hour" restates
-      scenario content — remove from invariants?
-   4. [allium] specs/allium/sso-login.allium is stale (feature file
-      newer by 12d). Mark as stale, leave as-is, or unlink?
-
-   Reply with `1: accept`, `1: reject`, `1: defer`, or
-   `1: <amended>` for each. Silence = reject all (leave as-is).
-   ```
-
-4. **Resolve.** Map each reply to a bucket:
-    - `accept` → fold the change into the next draft; log under
-      *Accepted suggestions* in the decision record.
-    - `reject` → leave the draft as-is; log under *Rejected
-      suggestions*.
-    - `defer` → log under *Deferred / open questions* (shared with
-      elicit; distill appends, never replaces).
-    - `<amended>` → the user's variant replaces the proposal; fold in
-      and log under *Accepted suggestions* with the amended wording.
-
+   low-risk tightenings (see *Draft guardrails*). Present the whole
+   proposed document, preceded by a short "What I touched" summary
+   of categories — **not** a line diff (e.g. "normalized Gherkin
+   capitalization; split three run-on steps; refreshed `updated`
+   timestamp; added `- none declared` to an empty *Out of scope*").
+3. **Flag.** Present meaning-changing observations the sub-skill did
+   **not** fold into the draft, using the grouped-flag pattern from
+   `spezi/core/patterns.md`. Buckets: `accept` / `reject` / `defer` /
+   `<amended>`; silence = reject all.
+4. **Resolve.** `accept` / `<amended>` → fold the change into the
+   next draft; log under *Accepted suggestions*. `reject` → leave the
+   draft as-is; log under *Rejected suggestions*. `defer` → log under
+   *Deferred / open questions* (distill appends, never replaces).
 5. **Redraft.** If any flags resolved to `accept` or `<amended>`,
-   compose a second full proposal and show it. Repeat from Flag with
-   any newly introduced observations. If no flags changed state, skip
-   to Confirm.
-
-6. **Confirm.** The user types `confirm` / `looks good` / `yes`, or
-   requests another revision (freeform critique → redraft). On
-   confirmation: write the feature file, write the decision record,
-   evaluate the Allium assessment hook.
+   compose a second full proposal and repeat from Flag for any newly
+   introduced observations. Otherwise skip to Confirm.
+6. **Confirm.** User types `confirm` / `looks good` / `yes`, or
+   critiques freeform (→ redraft). On confirmation: write the
+   feature file, write the decision record, let Spezi evaluate the
+   Allium hook.
 
 A distill session may iterate Draft ↔ Flag ↔ Redraft up to **three
-cycles**. A fourth unresolved cycle forces the sub-skill to stop and
-ask the user whether to commit the current state as-is or `/abort` —
-this is the distill-side equivalent of the elicit "two-batch" cap.
+cycles**. A fourth unresolved cycle halts to ask "commit as-is or
+`/abort`?" — the distill equivalent of elicit's two-batch cap.
 
 ### Draft guardrails
 
 The initial draft applies only changes the user can reasonably expect
-without being asked. The boundary:
+without being asked. Anything a reader might reasonably interpret two
+ways is meaning-changing — flag it.
 
-**Apply silently (low-risk).**
-- Gherkin keyword casing (`given` → `Given`).
-- One-sentence-per-step formatting; splitting run-on steps where the
-  split is mechanical (conjunction-driven, no semantic inference).
-- Consistent scenario heading prefix `Scenario:`.
-- Empty boundary lists → `- none declared`.
-- Front-matter key ordering, `updated` timestamp refresh.
-- Stripping trailing whitespace, normalizing blank lines.
-- Typo fixes in Gherkin connective words only (`Whn` → `When`).
-  Typos in user prose (summary, boundaries, step content) are
-  **not** silently corrected — propose them as flags.
+| Apply silently (low-risk) | Never apply without a flag (meaning-changing) |
+|---------------------------|-----------------------------------------------|
+| Gherkin keyword casing (`given` → `Given`) | Adding, removing, merging, or splitting scenarios |
+| Splitting run-on steps where the split is mechanical (conjunction-driven, no semantic inference) | Renaming actors, triggers, or scenarios |
+| Consistent `Scenario:` heading prefix | Changing step wording beyond keyword casing |
+| Empty boundary lists → `- none declared` | Altering or adding invariants |
+| Front-matter key ordering; `updated` timestamp refresh | Changing *In scope* / *Out of scope* / *Depends on* membership |
+| Trailing whitespace; blank-line normalization | Modifying `allium` references (add, remove, status change) |
+| Typo fixes in Gherkin connective words only (`Whn` → `When`) | Rewriting the prose summary in a way that could change scope |
 
-**Never apply without a flag (meaning-changing).**
-- Adding, removing, merging, or splitting scenarios.
-- Renaming actors, triggers, or scenarios.
-- Changing step wording beyond keyword casing.
-- Altering or adding invariants.
-- Changing *In scope* / *Out of scope* / *Depends on* membership.
-- Modifying `allium` references (add, remove, status change).
-- Rewriting the prose summary paragraph in a way that could change
-  scope.
-
-A proposal a reader might reasonably interpret two ways counts as
-meaning-changing — flag it.
-
-### Escape hatches in distill
-
-- `/done` — at the Flag step, treat all un-answered flags as
-  `reject` and proceed to Redraft (with no changes) → Confirm.
-- `/skip` — at the Flag step, skip an individual numbered item by
-  `/skip <n>`; it is recorded as deferred. Bare `/skip` skips all
-  open flags (synonym for `/done`).
-- `/back` — from Flag or Redraft, return to the immediately prior
-  draft. The sub-skill re-presents the prior proposal and the prior
-  flag list; any `accept`/`<amended>` decisions for the discarded
-  draft are cleared. `/back` from Read exits the session (see step 1).
-- `/abort` — persist nothing. The original `.feature.md` is left
-  untouched. A decision record is still written, with
-  `Outcome: aborted` and any flags that were presented logged under
-  *Rejected suggestions* with a `(session aborted)` note.
+Typos in user prose (summary, boundaries, step content) are **not**
+silently corrected — propose them as flags.
 
 ### Distill decision record
 
-Same path convention as elicit:
-`specs/gherkin/decisions/<YYYY-MM-DD>-<slug>.md`. If a same-day
-record already exists, append a suffix `-distill-<n>` rather than
-overwriting (e.g. `2026-04-24-sso-login-distill-1.md`).
-
-Body uses the shared decision-record shape plus two distill-specific
-sections and a `session-type` marker:
-
-```
-# <Feature title> — distill session, <YYYY-MM-DD>
-
-- **Slug**: <slug>
-- **Session type**: distill
-- **Feature file**: specs/gherkin/<slug>.feature.md
-- **Outcome**: completed | aborted
-- **Started**: <ISO 8601 timestamp>
-- **Ended**: <ISO 8601 timestamp>
-- **Cycles**: <n>
-
-## Accepted suggestions
-
-- [scenario: <name>] <summary of change>
-- ...
-
-## Rejected suggestions
-
-- [scenario: <name>] <summary of proposal>: rejected by user
-- ...
-
-## Deferred / open questions
-
-- <question>  *(this section is shared across elicit and distill
-  records for the same slug; distill appends)*
-- ...
-
-## Session trail
-
-- ...
-```
+Schema and path convention (including the same-day
+`-distill-<n>` suffix) live in `spezi/core/decision-records.md`
+§Distill extension. Distill writes the base schema plus *Accepted
+suggestions*, *Rejected suggestions*, and a `Cycles` count.
 
 ### Non-goals for distill
 
@@ -600,64 +349,19 @@ not re-specify the schema here.
 
 ### Decision record
 
-```
-# <Feature title> — elicit session, <YYYY-MM-DD>
-
-- **Slug**: <slug>
-- **Feature file**: specs/gherkin/<slug>.feature.md
-- **Outcome**: completed | aborted | draft
-- **Started**: <ISO 8601 timestamp>
-- **Ended**: <ISO 8601 timestamp>
-
-## Decisions
-
-- **<topic>**: <decision> *(phase: <scope|happy|edge|wrap>)*
-- ...
-
-## Deferred / open questions
-
-- <question> *(flagged in <phase>; will be picked up in distill)*
-- ...
-
-## Out of scope (explicit)
-
-- <exclusion>
-- ...
-
-## Session trail
-
-- `/back` from edge → scope at <timestamp>: <one-line why>
-- `/skip` on scope question (d) at <timestamp>
-- ...
-```
-
-The *Session trail* is a short chronological log of notable control
-events — not a transcript. It exists so a future reader can tell
-which phase was revisited and why.
+Schema, path convention, and cross-session continuity live in
+`spezi/core/decision-records.md`. Elicit writes the base schema; a
+successful session ends with `Outcome: completed`, an aborted one
+with `Outcome: aborted`, and an environment-terminated one with
+`Outcome: draft`.
 
 ## Worked example (abridged)
 
-Seed: `add SSO to login`.
-
-**Scope batch**
-> a) What's the one-line feature summary? b) Which identity
-> providers? c) Actor — end user only, or also admins? d) Is
-> password login retained alongside SSO? e) Out-of-scope items you
-> already know? f) Any compliance constraint (e.g. SAML assertions
-> must be signed)?
->
-> /done if enough; /skip <letter> to skip one.
-
-User: `a) SSO login for enterprise users. b) Okta + Azure AD. c) end users. d) yes, retained. e) SCIM provisioning — separate feature. f) SAML must be signed.`
-
-Ambiguities flagged: `1. [scope] Session lifetime — same as password
-sessions or different? 2. [scope] MFA — inherited from IdP or
-enforced locally?`
-
-User: `1: same. 2: defer.`
-
-Proposed Scope section shown; user confirms. Slug fixed as
-`sso-login-for-enterprise-users`. Feature file and decision record
-created. Advance to Happy path.
-
-(Happy path, Edge cases, Wrap-up proceed analogously.)
+Seed: `add SSO to login`. Scope batch asks six labeled questions
+(summary, providers, actor, password-retention, known out-of-scope,
+compliance). The user answers most inline; remaining gaps surface
+as an ambiguity list (session lifetime, MFA ownership). The user
+resolves `1: same` and `2: defer`, the proposed Scope section is
+confirmed, the slug `sso-login-for-enterprise-users` is fixed, and
+the feature file plus decision record are created. Happy path, Edge
+cases, and Wrap-up proceed analogously.

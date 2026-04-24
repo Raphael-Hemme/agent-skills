@@ -89,14 +89,19 @@ spezi/                          orchestrator
 ├── core/
 │   ├── router.md               parser + routing
 │   ├── state.md                .spezi/state.json schema + I/O
-│   └── allium.md               linking schema, assessment hook,
-│                               decline memory, reconciliation
+│   ├── allium.md               linking schema, assessment hook,
+│   │                           decline memory, reconciliation
+│   ├── patterns.md             shared dialogical patterns
+│   │                           (escape hatches, batch Q&A,
+│   │                           ambiguity flags, full-section
+│   │                           rewrite, session state)
+│   └── decision-records.md     decision-record schema: base +
+│                               distill and TDD extensions
 └── adapters/
     └── claude-code.md          Claude Code integration
 
 spezi-gherkin/                  spec authoring
-└── SKILL.md                    elicit + distill, file formats,
-                                decision records, escape hatches
+└── SKILL.md                    elicit + distill, file format
 
 spezi-tdd/                      TDD phase runner
 └── SKILL.md                    --read / --red / --green, read-only
@@ -152,8 +157,10 @@ from disk. There is no explicit handoff signal.
 | Core router | `spezi/core/router.md` | Parse; resolve availability; emit `RoutingDecision`. No user turns. |
 | Core state | `spezi/core/state.md` | Runtime cache contract: schema, read/write, invalidation, gitignore handling. |
 | Core Allium | `spezi/core/allium.md` | `.feature.md` ↔ `.allium` linking schema, assessment hook, decline memory, reconciliation. |
-| Gherkin authoring | `spezi-gherkin/SKILL.md` | `--elicit`, `--distill`. File formats, decision records, escape hatches. No Allium logic. |
-| TDD phases | `spezi-tdd/SKILL.md` | `--read`, `--red`, `--green`. Read-only contract, `/update-spec`. Extends Gherkin's decision-record schema. |
+| Core patterns | `spezi/core/patterns.md` | Escape hatches, batch Q&A, ambiguity flags, full-section rewrite, session state. Canonical for every sub-skill. |
+| Core records | `spezi/core/decision-records.md` | Decision-record path convention, base schema, distill and TDD extensions. |
+| Gherkin authoring | `spezi-gherkin/SKILL.md` | `--elicit`, `--distill`. Feature-file format. Mode-specific flow only; patterns and records live in core. |
+| TDD phases | `spezi-tdd/SKILL.md` | `--read`, `--red`, `--green`. Read-only contract, `/update-spec`. Patterns and records live in core. |
 | Allium | external plugin | Test generation, execution, Allium-side artifacts. Opaque to Spezi. |
 
 ## Adapter layer
@@ -183,6 +190,8 @@ sub-skills.
 - Parser/router → `spezi/core/router.md`.
 - Elicit / distill → `spezi-gherkin/SKILL.md`.
 - TDD phase → `spezi-tdd/SKILL.md`.
+- Shared dialogical patterns → `spezi/core/patterns.md`.
+- Decision-record schema → `spezi/core/decision-records.md`.
 - Allium hook, linking, decline memory → `spezi/core/allium.md`.
 - Claude Code wiring → `spezi/adapters/claude-code.md`.
 - Runtime cache → `spezi/core/state.md`.

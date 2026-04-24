@@ -34,6 +34,10 @@ entirely without touching the core.
 - Gitignore handling — see `spezi/core/state.md` §Gitignore handling.
 - Allium orchestration (linking schema, assessment hook, decline
   memory, reconciliation) — see `spezi/core/allium.md`.
+- Shared dialogical patterns (escape hatches, batch Q&A, ambiguity
+  flags, full-section rewrite, session state) — see
+  `spezi/core/patterns.md`.
+- Decision-record schema — see `spezi/core/decision-records.md`.
 
 The adapter must not introduce new rules for any of the above. If a
 rule is missing from the core, add it to the core — not here.
@@ -118,26 +122,21 @@ trigger Allium's own initialization. Detection only.
 
 ### `describeAllium()` — optional
 
-When Allium is available, the adapter may return a one-line role
-summary for the assessment-hook prompt (see `spezi/core/allium.md`
-§Post-Gherkin assessment hook). If the adapter does not implement
-this, Spezi falls back to the generic
-`"continue with the Allium-side workflow"`.
-
-Recommended Claude Code implementation: read the first non-empty line
-of the description field in the located Allium `SKILL.md`'s YAML
-front matter and truncate to 80 characters. Do not fabricate.
+When Allium is available, return a one-line role summary for the
+assessment-hook prompt (see `spezi/core/allium.md` §Post-Gherkin
+assessment hook). Recommended: the first non-empty line of the
+description field in the located Allium `SKILL.md`'s YAML front
+matter, truncated to 80 characters. Do not fabricate. If
+unimplemented, Spezi falls back to `"continue with the Allium-side
+workflow"`.
 
 ### State I/O
 
-Use Claude Code's standard file tools (Read / Write) to honor the
-contract in `spezi/core/state.md`. Atomic write is achieved by
-writing `state.json.tmp` and then using the Write tool to overwrite
-`state.json` (or, if the harness exposes rename, preferring that).
-
-The adapter has **no** additional state-file rules. Do not embed
-Claude Code specifics (paths, tool names) in `state.json` content —
-only schema-defined fields are written.
+Use Claude Code's Read/Write tools to honor `spezi/core/state.md`.
+Atomic write: serialize to `state.json.tmp`, then overwrite
+`state.json` (or rename, if the harness exposes it). Do not embed
+Claude Code specifics in `state.json` content — only schema-defined
+fields.
 
 ## Dispatch
 
@@ -152,51 +151,41 @@ The adapter consumes the `RoutingDecision.kind` and acts:
 
 ### Invoking the gherkin-side sub-skill
 
-The router's `skill: "gherkin"` target resolves to one of two
-sibling skills, selected by mode:
+The router's `skill: "gherkin"` target resolves by mode:
 
 - `elicit`, `distill` → `spezi-gherkin/SKILL.md`
 - `read`, `red`, `green`, `refactor` → `spezi-tdd/SKILL.md`
 
-Invocation means: load the chosen SKILL.md, pass `{ mode, seed,
-parsed }`, and follow its flow. The adapter does not mix the two
-or inject logic between them.
+Invocation loads the chosen SKILL.md, passes `{ mode, seed, parsed }`,
+and follows its flow. The adapter does not mix the two skills or
+inject logic between them.
 
 ### Invoking Allium
 
-Allium is an external plugin. Invocation means: call the registered
-Allium entry-point (slash command or plugin hook — whichever the
-detection path found) with the `{ mode, seed, featureFile }`
-payload. The adapter does not know Allium's internals and must not
-second-guess them.
-
-Under `--both`, the adapter runs the gherkin-side skill to
-completion first, then invokes Allium with the just-written feature
-file. There is no explicit handoff signal — Spezi detects
-completion by the sub-skill returning control and by inspecting the
-feature file's `status` field. See `spezi/core/allium.md`
-§Post-Gherkin assessment hook for the eligibility rules.
+Call the registered Allium entry-point (slash command or plugin hook
+— whichever the probe found) with `{ mode, seed, featureFile }`.
+Under `--both`, the gherkin-side skill runs to completion first,
+then Allium is invoked with the just-written feature file. There is
+no explicit handoff signal — Spezi infers completion by the sub-skill
+returning control and by inspecting the `.feature.md`'s `status`
+field (see `spezi/core/allium.md` §Post-Gherkin assessment hook).
 
 ### Degradation
 
 When `RoutingDecision.degradationNotices` is non-empty, surface each
 entry to the user before acting on `kind`. Never fold a notice into
-the sub-skill's prose silently; the user must see it.
+the sub-skill's prose silently.
 
 ## Installation checklist
 
-1. Place the Spezi tree at `spezi/` in the project root, or install
-   it globally under `~/.claude/skills/spezi/`.
-2. Create `.claude/commands/spezi.md` (project) or
-   `~/.claude/commands/spezi.md` (user) with the minimum contents
-   above.
+1. Place the Spezi tree at `spezi/` (project scope) or
+   `~/.claude/skills/spezi/` (user scope).
+2. Create `.claude/commands/spezi.md` or `~/.claude/commands/spezi.md`
+   with the minimum contents above.
 3. Install the Allium plugin per its own instructions — Spezi does
    **not** install it.
-4. Verify with `/spezi check`. An Allium-available report confirms
-   the probe path; an Allium-unavailable report confirms that
-   degradation will trigger rather than crash.
-5. (Optional) `/spezi status` prints the cached state after a
-   prior run.
+4. Verify with `/spezi check`. Either outcome (Allium available or
+   unavailable) is a valid configuration.
 
 ## Non-goals
 

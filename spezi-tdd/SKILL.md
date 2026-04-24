@@ -13,9 +13,11 @@ supplies the spec-side alignment analysis and guidance, Allium does
 the execution. Neither side edits the other's artifacts.
 
 This file owns the read-only enforcement contract, the alignment
-check, the `/update-spec` escape hatch, and the TDD-specific
-extension to the decision-record schema. The base record schema is
-in `spezi-gherkin/SKILL.md` §Decision record.
+check, and the `/update-spec` escape hatch. Shared dialogical
+patterns (escape hatches, batch Q&A, grouped ambiguity flags,
+full-section rewrite, session state) live in
+`spezi/core/patterns.md`. Decision-record schema — base plus the
+TDD extension — lives in `spezi/core/decision-records.md`.
 
 ## Modes
 
@@ -46,45 +48,30 @@ contract applies symmetrically to Gherkin and Allium.
 
 ### Agent-side enforcement
 
-The enforcement contract is behavioral, not sandboxed. An agent
-running this protocol must:
+The contract is behavioral, not sandboxed. A conforming agent must:
 
-1. **Announce the contract at session open.** Before the first turn,
-   surface a one-paragraph preamble naming the read-only paths and
-   the `/update-spec` escape. The user should never be surprised by
-   what this mode will and will not touch.
-2. **Refuse writes to the read-only set.** If the session flow would
-   otherwise write, edit, or delete a read-only file, the sub-skill
-   must stop, describe the intended change, and ask the user to
-   either confirm via `/update-spec` or pick a different approach.
-   A silent edit is a contract violation.
-3. **Never propose a read-only edit as a fait accompli.** Proposals
-   that would mutate read-only files must be phrased as
-   *observations* routed through the grouped-flag pattern — never as
-   "I'll change X" prose.
-4. **Honor the contract across sub-skill boundaries.** When the
-   router invokes both Gherkin and Allium for a TDD mode, each
-   sub-skill enforces on its own side. Gherkin must not instruct
-   Allium to write a read-only file, and vice versa. The user's
-   consent via `/update-spec` is what either side waits for.
+| Requirement | Behaviour |
+|-------------|-----------|
+| Announce at session open | One-paragraph preamble names the read-only paths and the `/update-spec` escape, before the first turn. |
+| Refuse silent writes to the read-only set | Stop, describe the intended change, ask the user to either invoke `/update-spec` or pick a different approach. |
+| Never propose a read-only edit as a fait accompli | Phrase proposals as observations routed through the grouped-flag pattern (see `spezi/core/patterns.md`), not as "I'll change X" prose. |
+| Honor the contract across sub-skill boundaries | Gherkin must not instruct Allium to write a read-only file, and vice versa. Each side enforces on its own; `/update-spec` is what both wait for. |
 
 ### Session-scoped exceptions
 
-The only exceptions are:
+Only three writes escape read-only:
 
-- `/update-spec` — exits read-only for a single, scoped write to the
-  feature file (and its decision record). Returns to read-only
-  immediately afterwards. See *Spec update step*.
-- The TDD decision record itself — created fresh per session; not a
-  read-only artifact because it did not exist before this session.
-  Prior decision records (for other sessions) remain read-only.
+- `/update-spec` — a single scoped write to the feature file and its
+  decision record, returning to read-only afterwards. See *Spec
+  update step*.
+- The TDD decision record itself — created fresh per session, so it
+  did not exist before the session and is not read-only. Prior
+  decision records remain read-only.
 - Newly created test files under `--red` — the whole point of the
-  mode; not "read-only" because they did not exist before this
-  session.
+  mode.
 
-No other writes are legitimate. A conforming sub-skill that detects
-it is about to violate the contract must halt and surface the
-attempt to the user verbatim.
+A conforming sub-skill that detects it is about to violate the
+contract must halt and surface the attempt to the user verbatim.
 
 ## `--read` mode
 
@@ -100,30 +87,25 @@ read mode; that is Allium's concern).
 
 ### Flow
 
-1. **Resolve.** Seed → one feature file, using the same resolution
-   rules as distill (slug / path / free-form; multiple matches →
-   short list + ask; zero matches → report and exit).
+1. **Resolve.** Seed → one feature file (same resolution rules as
+   distill: slug / path / free-form; multiple matches → short list +
+   ask; zero matches → report and exit).
 2. **Preamble.** Announce the read-only contract:
    > `--read`: *<slug>.feature.md* and its decision records are
    > read-only. No files will be written. Use `/update-spec` to
    > propose a change; `/abort` to exit.
-3. **Synopsis.** In one block, report: title, last-updated date,
-   scenario count (happy vs edge), boundaries summary, any `allium`
+3. **Synopsis.** Report in one block: title, last-updated date,
+   scenario count (happy vs edge), boundaries summary, `allium`
    references with their `status`.
-4. **Follow-up queries.** The user may ask focused questions — "show
-   the auth edge cases," "what's the invariant list," "what's linked
-   from Allium." The sub-skill answers by quoting the file verbatim
-   or summarizing, never by paraphrasing normative text.
-5. **Exit.** The session ends when the user says so, or on `/abort`.
-   `/update-spec` may be invoked at any time and flips to the spec
-   update step; after the update, the session returns to read mode
-   with the refreshed file.
+4. **Follow-up queries.** Answer focused questions by quoting the
+   file verbatim or summarizing — never by paraphrasing normative
+   text.
+5. **Exit.** Session ends on user signal or `/abort`. `/update-spec`
+   may be invoked at any time; after the update, the session
+   returns to read mode with the refreshed file.
 
-### Writes
-
-None, unless `/update-spec` is invoked. No decision record is
-written for a pure `--read` session — there is nothing to decide.
-The spec update step, when invoked, writes its own record.
+No writes unless `/update-spec` is invoked. A pure `--read` session
+writes no decision record — there is nothing to decide.
 
 ## `--red` mode
 
@@ -162,40 +144,24 @@ side edits `.feature.md`.
    congruent with the test's expressed expectations, not a byte
    comparison.
 
-4. **Grouped mismatch flags.** Mismatches are presented as a grouped
-   flag list, same visual shape as elsewhere:
+4. **Grouped mismatch flags.** Mismatches present via the
+   grouped-flag pattern (`spezi/core/patterns.md`). Buckets:
+   `generate` / `update-spec` / `skip` / `handoff`; silence = skip
+   all.
 
-   ```
-   Alignment gaps:
-   1. [scenario: Edge case — expired] No test found.
-   2. [scenario: Edge case — rate limited] Test exists but spec Then
-      is stronger than test assertion.
-   3. [scenario: Invariant — audit log] Test exists but is skipped.
-   4. [manifest] specs/allium/sso-login.allium references a deleted
-      test file.
+5. **Resolve.** `generate` → Allium generates a test using the
+   scenario's text as the authoritative source; the new test is
+   written under `specs/allium/<slug>/` (or Allium's layout).
+   Gherkin verifies the new test references the scenario.
+   `update-spec` → invoke the spec update step, then re-evaluate
+   this mismatch against the new spec before regenerating.
+   `skip` → log under *Deferred* in the TDD decision record.
+   `handoff` → hand the gap to the user; log as deferred with reason
+   `user-handoff`.
 
-   Reply with `1: generate`, `1: update-spec`, `1: skip`, or
-   `1: handoff` for each. Silence = skip all.
-   ```
-
-5. **Resolve.** Map each reply:
-   - `generate` → Allium generates a test for that scenario. Gherkin
-     supplies the scenario's text as the authoritative source. The
-     test is written to a new file under `specs/allium/<slug>/` (or
-     wherever Allium's layout dictates). Gherkin verifies that the
-     new test references the scenario.
-   - `update-spec` → invoke the spec update step, then re-evaluate
-     this mismatch against the new spec before regenerating or
-     skipping.
-   - `skip` → log under *Deferred* in the TDD decision record.
-   - `handoff` → stop generating; hand the gap to the user (e.g. a
-     human will write the test). Log as deferred with reason
-     `user-handoff`.
-
-6. **Persist.** Write the TDD decision record. Any new test files
-   land per Allium's rules (with the Allium-side back-reference to
-   the feature file — see `spezi/core/allium.md` *Linking
-   convention*). No `.feature.md` write occurs outside
+6. **Persist.** Write the TDD decision record. New test files land
+   per Allium's rules (with the Allium-side back-reference per
+   `spezi/core/allium.md`). No `.feature.md` write occurs outside
    `/update-spec`.
 
 7. **Confirm.** Final prompt: "Generated <N> tests, deferred <M>,
@@ -204,12 +170,10 @@ side edits `.feature.md`.
 
 ### Scope guardrails
 
-- `--red` does **not** run tests. Running them is `--green`'s job.
-  A brand-new failing test is presumed failing; verification belongs
-  to the next phase.
+- `--red` does **not** run tests. That's `--green`'s job.
 - `--red` does **not** edit existing tests. A mismatch on an
   existing test is `update-spec` (if the spec is wrong) or deferred
-  (if the test is wrong — that belongs to refactor, when specified).
+  (if the test is wrong — that's a refactor-phase concern).
 
 ## `--green` mode
 
@@ -226,8 +190,8 @@ runs the tests and reports failures.
 
 ### Flow
 
-1. **Resolve.** Seed → one feature file (or a focused subset:
-   `seed = "<slug> happy path"` narrows to a scenario name).
+1. **Resolve.** Seed → one feature file. A focused subset narrows to
+   a scenario name: `seed = "<slug> happy path"`.
 2. **Preamble.** Announce the contract:
    > `--green`: *<slug>.feature.md*, prior decision records, and
    > all test files are read-only. Implementation source is not
@@ -237,8 +201,11 @@ runs the tests and reports failures.
    pass/fail roster. Gherkin annotates each failing test with the
    governing scenario's Given/When/Then, quoted from the feature
    file.
-4. **Guidance.** For each failing test, the sub-skill produces a
-   *guidance block*, never a patch:
+4. **Guidance.** For each failing test, emit a *guidance block* —
+   never a patch. The block quotes the spec verbatim, summarizes
+   the observed failure, and names a likely gap. It does not
+   propose code. If a coding-agent handoff is available, offer it;
+   do not invoke silently.
 
    ```
    [scenario: Happy path — SSO login]
@@ -248,38 +215,28 @@ runs the tests and reports failures.
              Then a session cookie is issued scoped to the user.
    Observed: assertion accepted; session cookie absent from response.
    Likely gap: cookie issuance path in the callback handler.
-   Files to inspect: <if Allium can introspect; otherwise omit>.
    ```
 
-   The guidance block quotes the spec verbatim and summarizes the
-   failure. It does not propose code. If the agent ecosystem
-   supports handoff to a coding agent, the sub-skill offers that
-   handoff — it does not silently invoke it.
+5. **Loop.** User reports "done" (or re-runs explicitly) → step 3
+   repeats with the current roster. Continue until all targeted
+   tests pass or the user exits.
 
-5. **Loop.** The user reports "done" (or re-runs explicitly) → step
-   3 repeats with the current pass/fail roster. Continue until all
-   targeted tests pass or the user exits.
+6. **Spec divergence.** If guidance reveals the spec is wrong (e.g.
+   a Then clause is physically impossible), surface the observation
+   via the grouped-flag pattern pointing at `/update-spec` — never
+   compensate silently.
 
-6. **Spec divergence.** If guidance reveals that the spec is wrong
-   (e.g. Then clause is actually impossible), the sub-skill
-   surfaces this as a flag rather than quietly compensating:
-   > [scenario: …] The Then clause appears to contradict
-   > <observed behavior>. Invoke `/update-spec` to revise, or
-   > `skip` to proceed under the test as written.
-
-7. **Persist.** A TDD decision record is appended at session end,
-   summarizing which tests passed, which were deferred, and whether
-   `/update-spec` was used.
+7. **Persist.** Write a TDD decision record at session end:
+   pass/fail roster, deferred items, any `/update-spec` invocation.
 
 ### What `--green` does not do
 
-- It does not write implementation code. Coding agents may be
-  invoked by the adapter or the user; Spezi's protocol stops at
-  guidance.
-- It does not edit tests. Tests are read-only in `--green`. A test
-  that is wrong is a refactor-phase concern (deferred).
-- It does not silently modify the feature file. Spec issues surface
-  as flags pointing at `/update-spec`.
+- Write implementation code (coding agents may be invoked by the
+  adapter or the user — Spezi stops at guidance).
+- Edit tests (tests stay read-only; wrong tests are a refactor-phase
+  concern, deferred).
+- Silently modify the feature file (spec issues surface as flags
+  pointing at `/update-spec`).
 
 ## Spec update step
 
@@ -305,31 +262,21 @@ In either case, the next turn is the confirmation step below.
 
    `cancel` returns to the current TDD mode without writing.
 
-2. **Scoped draft.** The sub-skill composes a proposed diff *at the
-   section level* — not the whole file, unlike distill. Only the
-   section(s) affected by the update are drafted. The output uses
-   the same full-section-rewrite rule from
-   `spezi-gherkin/SKILL.md` *Full-section rewrite rule*: the
-   section is rewritten in full, not patched in place.
+2. **Scoped draft.** Compose the proposed rewrite *at the section
+   level* — not the whole file, unlike distill. Only the section(s)
+   affected by the update are drafted, using the full-section
+   rewrite rule from `spezi/core/patterns.md` (replace, never
+   patch).
 
 3. **Grouped flag confirmation.** Any meaning-changing aspect of
-   the proposed rewrite is flagged, exactly as in distill:
-
-   ```
-   Flagged:
-   1. [scenario: …] Proposed Then clause adds a new assertion not
-      previously in the spec — accept?
-   2. [invariants] Removing the "audit log immutable" invariant —
-      is this intentional or a drafting slip?
-
-   Reply with `1: accept`, `1: reject`, `1: defer`, or
-   `1: <amended>` for each. Silence = reject all (leave as-is).
-   ```
+   the proposal is flagged per `spezi/core/patterns.md`
+   §Ambiguity-flag presentation; buckets are `accept` / `reject` /
+   `defer` / `<amended>`, silence = reject all.
 
 4. **Resolve + redraft.** Same accept / reject / defer / amended
-   semantics as distill. One redraft cycle maximum under a spec
-   update step — if the user is not satisfied after one revision,
-   the sub-skill suggests ending the TDD session and running
+   semantics as distill. **One redraft cycle maximum** under a
+   spec update step — if the user is not satisfied after one
+   revision, suggest exiting the TDD session and running
    `--distill` for deeper rework.
 
 5. **Persist.**
@@ -350,57 +297,23 @@ In either case, the next turn is the confirmation step below.
 
 ### Guardrails
 
-- The spec update step writes **only** to `.feature.md` and the
-  current session's decision record. It does not touch Allium
-  files, test files, or implementation source. Those are downstream
-  consequences of a spec change and are addressed in their own
-  phases (`--red` for missing/stale tests, `--green` for failing
-  implementation).
+- Writes **only** to `.feature.md` and the current session's
+  decision record. Allium files, test files, and implementation
+  source are untouched; downstream consequences are addressed in
+  their own phases (`--red` for missing/stale tests, `--green` for
+  failing implementation).
 - No cascading updates. A spec change that invalidates existing
   tests is recorded as a new alignment mismatch the next time
-  `--red` runs; it is not fixed inside the spec update step.
-- `/update-spec` is *not* a general-purpose edit command. It writes
-  what the scoped draft proposes, and nothing more. A user who
-  wants to rework the spec broadly should exit and run `--distill`.
+  `--red` runs.
+- `/update-spec` is not a general-purpose edit command — it writes
+  only what the scoped draft proposes. For broader rework, exit and
+  run `--distill`.
 
 ## TDD decision record
 
-Path: `specs/gherkin/decisions/<YYYY-MM-DD>-<slug>-<mode>.md`
-(`<mode>` ∈ `read` | `red` | `green`). If the same file already
-exists, append `-<n>`.
+Schema, path convention, and the `--red` / `--green` / `Spec updates`
+sections live in `spezi/core/decision-records.md` §TDD extension.
 
-Shape (extends the elicit/distill record shape):
-
-```
-# <Feature title> — <mode> session, <YYYY-MM-DD>
-
-- **Slug**: <slug>
-- **Session type**: tdd-<mode>
-- **Feature file**: specs/gherkin/<slug>.feature.md
-- **Outcome**: completed | aborted
-- **Started**: <ISO 8601 timestamp>
-- **Ended**: <ISO 8601 timestamp>
-
-## Alignment outcomes   # --red only
-- [scenario: …] generated → specs/allium/<slug>/<test>
-- [scenario: …] deferred (reason: …)
-- [scenario: …] handed off
-
-## Pass/fail roster     # --green only
-- [scenario: …] pass
-- [scenario: …] fail → guidance delivered; user reports in progress
-
-## Spec updates         # any mode, if /update-spec invoked
-- [scenario: …] <summary of accepted change>
-  Cross-ref: <path to related decision record, if any>
-
-## Deferred / open questions
-- ...
-
-## Session trail
-- `/update-spec` invoked at <timestamp>: <scope>
-- ...
-```
-
-A `--read` session writes a decision record **only** if
-`/update-spec` was invoked; otherwise the read is not a decision.
+A `--read` session writes a record **only** if `/update-spec` was
+invoked; otherwise the read is not a decision and no record is
+written.
