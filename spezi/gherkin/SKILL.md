@@ -18,11 +18,15 @@ before persisting it.
 |------|--------|---------|
 | `elicit` | **Specified below** | Interactive session to produce a new `.feature.md` from a seed idea. |
 | `distill` | **Specified below** | Tighten or restructure an existing `.feature.md` — draft-first, then grouped flags. |
-| `read` | Deferred | Read-only review of existing specs. |
-| `green` / `red` / `refactor` | Deferred | TDD-cycle operations over specs and implementation. |
+| `read` | Specified in `spezi/tdd/SKILL.md` | Read-only reference for a spec. Gherkin-only target. |
+| `red` / `green` | Specified in `spezi/tdd/SKILL.md` | TDD phases. Gherkin supplies the spec and alignment analysis; Allium handles tests. |
+| `refactor` | Deferred | TDD-cycle refactor operations over specs and implementation. |
 
 A conforming implementation of this file must not silently run deferred
 modes — if the router passes one, respond with "not yet implemented."
+The TDD modes defer their cross-sub-skill protocol to
+`spezi/tdd/SKILL.md`; Gherkin's Allium-linking rules and full-section
+rewrite rule are honored unchanged by that protocol.
 
 ## Shared concerns
 
