@@ -1,11 +1,22 @@
 ---
 name: spezi-elicit
-description: Author a new behaviour spec dialogically. Run a four-phase interactive session (Scope → Happy path → Edge cases → Wrap-up) producing a `.feature.md` under `specs/gherkin/<slug>.feature.md` plus a decision record. Use when the user wants to capture a new feature's behaviour as Gherkin, or types `/spezi --elicit ...`. Workshop, not generator — confirm every non-trivial decision before persisting; never invent behaviour. After Wrap-up, offer to invoke Allium for test generation when available.
+description: Run a structured discovery session to build a new `.feature.md` through conversation. Use when the user wants to create a new spec from scratch, elicit or gather requirements, capture domain behaviour, specify a feature or system, define what a system should do, or is describing functionality and needs help shaping it into a behavioural specification. Workshop, not generator — confirm every non-trivial decision before persisting; never invent behaviour. For extracting a spec from existing code use `/spezi-distill`; for targeted edits use `/spezi-tend`. After Wrap-up, offer to invoke `/spezi-propagate`.
 ---
 
 # spezi-elicit
 
-Run an interactive elicit session. Seed (free-form one-liner like `add SSO to login`) is the starting point and may be empty — if it is, the first Scope question asks what the feature is.
+Run an interactive elicit session. Seed (free-form one-liner like `add SSO to login`) is the starting point and may be empty — if it is, the first phase asks what the feature is.
+
+## Reading the initial prompt
+
+Before opening Phase 1, classify what the user brought:
+
+| User arrived with | Start at |
+|---|---|
+| Vague idea, no entities yet | Phase 0 (process discovery) |
+| Process described, entities named | Phase 1 (scope) |
+| Existing code | Exit, suggest `/spezi-distill` |
+| Existing `.feature.md` they want changed | Exit, suggest `/spezi-tend` |
 
 ## Output
 
@@ -59,14 +70,35 @@ Section updates are **replacements, never patches**. Compose the whole section's
 
 ## Phases
 
-Each phase: **Open** (state goal) → **Batch** → optional follow-up batch → **Flag** (any ambiguities) → **Propose** (full section) → **Confirm** (`yes`/`looks good`/`confirm`) → **Persist** (full-section rewrite). Phase 4 skips Batch.
+Each phase: **Open** (state goal) → **Batch** → optional follow-up batch → **Flag** (any ambiguities) → **Propose** (full section) → **Confirm** (`yes`/`looks good`/`confirm`) → **Persist** (full-section rewrite). Phase 0 is optional; Phase 4 skips Batch.
 
 | Phase | Goal | Batch topics (pick 3–7) | Section output |
 |-------|------|-------------------------|----------------|
+| 0 — Process discovery (optional) | Surface the larger process the feature lives in before homing in. Skip if user arrives with entities. | what triggers this work?; who's involved?; what state changes hands?; what marks the work done?; what other processes touch this? | No section yet — informs Phase 1 scoping. |
 | 1 — Scope | Name the feature and its boundaries. | one-line summary; primary actor; trigger; success criterion; known out-of-scope items; dependencies on prior specs; non-functional constraints. | `# <Title>` + prose summary + `## Boundaries` with **In scope** / **Out of scope** / **Depends on**. Empty bullets → `- none declared`. |
 | 2 — Happy path | Canonical success scenario(s). | Given (start state); When (action); Then (outcome); pre-existing setup; happy/edge boundary; scenario name(s). | One or more `## Scenario: Happy path — <name>` blocks. Multiple OK; keep each narrow. |
 | 3 — Edge cases | Failure modes, alternatives, invariants. | failure mode per happy step; invalid inputs; concurrency/timing/ordering; permission boundaries; invariants; explicit non-behaviours. | One `## Scenario: Edge case — <name>` per case. Cross-scenario invariants → `## Invariants` bulleted block. |
 | 4 — Wrap-up | Surface remaining ambiguities, confirm whole document, finalise the record. | *(no batch)* | Re-present open ambiguities → show full feature file → "Confirm as-is, revise a section (`/back`), or `/abort`?" → on confirm, set `status: complete`, write the record with `Outcome: completed`. |
+
+## Library-spec candidates
+
+If the user describes a generic integration pattern (OAuth, payment, email delivery, calendar sync, ATS sync, file storage, webhook handlers implementing third-party contracts), surface it as a flag at end of Scope:
+
+```
+1. [library candidate] OAuth flow looks reusable across features. Extract to specs/gherkin/lib/oauth-<provider>.feature.md?
+
+Reply `1: extract`, `1: keep inline`, `1: defer`. Silence = keep inline.
+```
+
+`extract` → finish this elicit session for the main feature first, then suggest a follow-up `/spezi-elicit` for the library spec. Don't open a nested session.
+
+## Calibration tests (run continuously through every phase)
+
+- **The "Why?" test.** Why does the stakeholder care? If you can't answer, drop the detail.
+- **The "Could it be different?" test.** Could it be implemented another way and still be the same system? If yes, it's implementation; redirect.
+- **The "Template vs instance" test.** Is the user naming a category or a specific instance? Default to category; promote to instance only when the user-facing flow names it.
+- **The "Obviously" trap.** Probe assumptions stated as obvious — they often aren't.
+- **The "Missing actor" trap.** Every action needs an actor. If the user says "the system does X", ask which actor.
 
 ## Persistence
 
@@ -84,13 +116,23 @@ Each phase: **Open** (state goal) → **Batch** → optional follow-up batch →
 
 A fresh `.feature.md` is created with no `allium:` block. If during Scope the user names an existing Allium file, write the entry with `status: pending` and `linkedAt: now` — no further action. Never read, write, or delete `.allium` files from this skill.
 
-## After Wrap-up — Allium hook
+## After Wrap-up — Propagate hook
 
-If the just-written file has `status: complete` and at least one `## Scenario:`, probe for Allium per `spezi/reference/allium-linking.md` §Availability probe. If available and the user hasn't declined Allium this invocation, ask the hook prompt from §Hook. On `yes`, hand off to Allium with `{ mode: "post-gherkin", seed: <slug>, featureFile: <path> }`. Log the hook outcome in the record's *Session trail*. Skip the hook if the user passed `--no-allium` or invoked under `/spezi --gherkin`.
+If the just-written file has `status: complete` and at least one `## Scenario:`, ask:
+
+```
+Elicit complete. Generate tests for this spec via /spezi-propagate?
+
+Reply `yes` / `not now` / `never this session`.
+```
+
+On `yes`, hand off with `{ seed: <slug> }`. `/spezi-propagate` decides Allium handoff vs. framework-native generation internally. Log outcome in the record's *Session trail*. Skip the hook if the user passed `--no-propagate`.
 
 ## What this skill does not do
 
 - No implementation hints, file scaffolding, code suggestions.
-- No cross-spec refactoring (run `/spezi-distill` for that).
-- No opinions on testing framework, CI, or runtime.
+- No extraction from existing code (run `/spezi-distill` for that).
+- No edits to an existing spec (run `/spezi-tend` for that).
+- No alignment-checking against code (run `/spezi-weed`).
+- No opinions on testing framework or CI.
 - No silent defaults: every decision is confirmed, deferred, or declared out of scope.

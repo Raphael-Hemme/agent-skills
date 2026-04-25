@@ -1,6 +1,6 @@
-# Allium linking and assessment hook
+# Allium linking, availability probe, and handoff
 
-How `.feature.md` and `.allium` files link, when to ask whether to invoke Allium, and how to detect Allium's availability. Spezi-side only — never edit `.allium` files.
+How `.feature.md` files link to Allium artifacts, how to detect Allium's availability, and the handoff payload `spezi-propagate` uses. Spezi-side only — never edit `.allium` files from any Spezi skill.
 
 ## `allium:` block schema (in `.feature.md` front matter)
 
@@ -27,34 +27,7 @@ Allium owns its file format; Spezi only prescribes this field name. Verify on re
 
 ## Staleness
 
-`<feature updated> > <entry linkedAt>` ⇒ `stale`. Signal, not failure. Resolution belongs to Allium, not to Spezi.
-
-## Hook — when and how to ask
-
-Fire after a successful elicit Wrap-up or distill Confirm (the just-written `.feature.md` has `status: complete` and at least one `## Scenario:`). Eligibility — all must hold:
-
-1. Allium is available (probe below).
-2. Allium hasn't already been declined this session.
-3. The user invoked Spezi via `/spezi` (the catch-all). Direct `/spezi-elicit` and `/spezi-distill` invocations also fire the hook unless the user passed `--no-allium` or equivalent.
-
-Prompt:
-
-```
-Allium assessment: Allium is available and this spec is ready for handoff.
-Invoke Allium now to <one-line role summary>?
-
-Reply `yes` / `not now` / `never this session`.
-```
-
-Role summary: first non-empty line of the located Allium SKILL.md's `description` field, truncated to 80 characters. Falls back to `"continue with the Allium-side workflow"`.
-
-Responses:
-
-- `yes` → invoke Allium with `{ mode: "post-gherkin", seed: <slug>, featureFile: <path> }`. Pre-prompt notice if any `stale`, missing-file, or mismatched-slug entries exist on the spec (`Notice: 1 stale, 1 missing-file Allium reference on this spec.`).
-- `not now` → skip; record `allium-hook: declined (this invocation)` in the *Session trail*.
-- `never this session` → same as `not now`, plus the decline persists for the rest of this Spezi invocation.
-
-Decline memory is invocation-scoped, never persistent. A new invocation asks again.
+`<feature updated> > <entry linkedAt>` ⇒ `stale`. Signal, not failure. Resolution belongs to Allium (or to a follow-up `/spezi-propagate` run), not to Spezi unilaterally.
 
 ## Availability probe
 
@@ -66,13 +39,27 @@ Read-only. First match wins:
 
 The probe must not invoke `/allium`, run Allium code, or trigger Allium's own setup. Detection only.
 
-## Reconciliation — Spezi flags, Allium fixes
+## Handoff payload (used by `spezi-propagate`)
 
-Spezi may detect on its own walk: stale entries, missing-file entries, mismatched-slug entries (the linked Allium file's `gherkin` back-reference points elsewhere), pending entries.
+When `spezi-propagate` chooses the Allium path (logic-heavy spec or explicit user request), invoke Allium with:
 
-What Spezi does:
+```
+{
+  mode: "post-gherkin",
+  seed: "<slug>",
+  featureFile: "specs/gherkin/<slug>.feature.md",
+  detectedIssues: [           // optional; may be empty
+    { kind: "stale", path: "specs/allium/<slug>.allium" },
+    { kind: "missing-file", path: "specs/allium/<other>.allium" },
+    { kind: "mismatched-slug", path: "..." }
+  ]
+}
+```
 
-- **Hook accepted (`yes`)**: pass detected issues to Allium verbatim in the invocation payload. Allium reconciles.
-- **Hook declined**: log detected issues in the decision record's *Session trail*. No automatic follow-up.
+Allium reconciles `detectedIssues` on its side. Spezi never reconciles `.allium` files itself.
 
-What Spezi never does: edit or delete `.allium` files; change an entry's `status` without explicit user consent (distill may flag a stale entry and mark it `stale` only with the user's accept).
+## What Spezi never does
+
+- Edit or delete `.allium` files.
+- Change an `allium:` block entry's `status` without explicit user consent (`spezi-tend` and `spezi-distill` may flag a stale entry and mark it `stale` only with the user's accept).
+- Install, configure, or regenerate Allium artifacts.
