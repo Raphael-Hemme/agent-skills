@@ -10,7 +10,6 @@ Turn a `.feature.md` into runnable tests. Two paths: **hand off to Allium** (log
 ## Output
 
 - New test files in the repo's test layout (path depends on path: `tests/features/`, `features/`, `cypress/integration/`, etc. — confirm with user).
-- Decision record: `specs/gherkin/decisions/<YYYY-MM-DD>-<slug>-propagate[-<n>].md` — base + Propagate section per `spezi/reference/decision-record.template.md`.
 - Updated `.feature.md` `allium:` block if Allium handoff occurred (status: `pending` → `active` after Allium confirms).
 
 ## Boundaries
@@ -54,7 +53,6 @@ Invoke Allium with `{ mode: "post-gherkin", seed: <slug>, featureFile: <path> }`
 
 After Allium returns control:
 - Record the Allium-side artifact paths in the `.feature.md` `allium:` block (`status: active`, `linkedAt: now`).
-- Persist the decision record with a `## Allium handoff` section listing the artifacts.
 - Skip Step 3b.
 
 ## Step 3b — Framework-native generation path
@@ -105,7 +103,7 @@ Flagged for your attention (Propagate — <slug>):
 Reply `1: stub`, `1: skip`, `1: defer`. Silence = stub all (with TODOs).
 ```
 
-After resolving, write all test files and the record.
+After resolving, write all test files.
 
 ## Step 4 — Update the spec's `allium:` block (Allium path only)
 

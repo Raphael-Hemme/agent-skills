@@ -8,7 +8,6 @@ slug: <slug>
 status: draft | complete | aborted
 created: <YYYY-MM-DD>
 updated: <YYYY-MM-DD>
-session: specs/gherkin/decisions/<YYYY-MM-DD>-<slug>[-<type>].md
 allium:
   - path: specs/allium/<slug>.allium
     kind: tests | plan | generated-from
@@ -40,6 +39,9 @@ Then ...
 
 ## Invariants
 - ...
+
+## Open questions
+- ...
 ```
 
 ## Rules
@@ -52,3 +54,4 @@ Then ...
 - `created` is written once. `updated` is refreshed on every successful write.
 - Omit the `allium:` key entirely when there are no references; `allium: []` and a missing key are equivalent on read.
 - Status: `draft` while in progress, `complete` on successful Wrap-up / Confirm, `aborted` on `/abort`.
+- `## Open questions` is omitted entirely when there are none. Resolved questions are deleted (folded into scenarios, boundaries, or invariants), not struck-through.

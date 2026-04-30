@@ -29,22 +29,18 @@ If the request goes beyond targeted edits, name the right skill and exit.
 ## Preconditions
 
 - Target `.feature.md` exists and parses (front matter optional; scenarios, boundaries, steps must be present).
-- `specs/gherkin/decisions/` is writable.
 - Existing `allium:` entries are read into memory as context. Never edit `.allium` files.
 
 ## Output
 
 - Updated `specs/gherkin/<slug>.feature.md` — match `spezi/reference/feature-file.template.md`.
-- Decision record: `specs/gherkin/decisions/<YYYY-MM-DD>-<slug>-tend[-<n>].md` — base + Tend section per `spezi/reference/decision-record.template.md`.
-
-The `-tend` suffix is required. If a same-day record collides, append `-1`, `-2`, ... until unique. Never overwrite.
 
 ## Escape hatches
 
 - `/done` — current flag list is sufficient. Unanswered flags = `reject`.
 - `/skip <n>` defers one flag; bare `/skip` is a synonym for `/done`.
 - `/back` from Read is a no-op synonym for `/abort` — say so. From later steps it returns to Read.
-- `/abort` ends the session. Persist nothing to the feature file; write the record with `Outcome: aborted`.
+- `/abort` ends the session. Persist nothing to the feature file.
 
 ## Full-section rewrite
 
@@ -52,7 +48,7 @@ The whole `.feature.md` is composed and re-presented per cycle. Section-level ed
 
 ## Loop — Read → Draft → Flag → Resolve → Redraft → Confirm
 
-1. **Read.** Load the feature file and the most recent decision record for its slug. Open with one line: `Tending <slug>, last updated <date>, <N> scenarios. Ready? (yes / /abort)`.
+1. **Read.** Load the feature file. Open with one line: `Tending <slug>, last updated <date>, <N> scenarios. Ready? (yes / /abort)`.
 2. **Draft.** Compose a revised full `.feature.md` applying only low-risk tightenings (table below). Present the whole proposed document, preceded by a short *What I touched* summary of categories — not a line diff.
 3. **Flag.** Present meaning-changing observations the skill did **not** fold into the draft, using the pattern:
 
@@ -65,9 +61,9 @@ The whole `.feature.md` is composed and re-presented per cycle. Section-level ed
    Multiple on one line OK. Silence = reject all.
    ```
 
-4. **Resolve.** `accept` / `<amended>` → fold into the next draft, log under *Accepted suggestions*. `reject` → leave draft as-is, log under *Rejected suggestions*. `defer` → log under *Deferred / open questions* (append, never replace prior entries).
+4. **Resolve.** `accept` / `<amended>` → fold into the next draft. `reject` → leave draft as-is. `defer` → append the item as a bullet to the spec's `## Open questions` section in the next draft (never replace prior entries; resolved questions are folded into scenarios/boundaries and deleted, not struck-through).
 5. **Redraft.** If any flag resolved to `accept` or `<amended>`, compose a second full proposal and repeat from Flag for any newly-introduced observations. Otherwise skip to Confirm.
-6. **Confirm.** User types `confirm` / `looks good` / `yes`, or critiques freeform (→ redraft). On confirmation: write the feature file (`status: complete`, `updated` refreshed), write the record (`Outcome: completed`, `Cycles: <n>`).
+6. **Confirm.** User types `confirm` / `looks good` / `yes`, or critiques freeform (→ redraft). On confirmation: write the feature file (`status: complete`, `updated` refreshed).
 
 Cap: **three** cycles of Draft ↔ Flag ↔ Redraft. A fourth unresolved cycle halts: `Commit as-is or /abort?`.
 
@@ -99,7 +95,7 @@ Tend complete. Generate or refresh tests for this spec via /spezi-propagate?
 Reply `yes` / `not now` / `never this session`.
 ```
 
-On `yes`, hand off with `{ seed: <slug> }`. Log outcome in *Session trail*. Skip the hook if the user passed `--no-propagate` or invoked under `/spezi --no-propagate`.
+On `yes`, hand off with `{ seed: <slug> }`. Skip the hook if the user passed `--no-propagate` or invoked under `/spezi --no-propagate`.
 
 ## Library-spec candidates
 

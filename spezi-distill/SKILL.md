@@ -5,12 +5,11 @@ description: Extract a Gherkin specification from an existing codebase. Use when
 
 # spezi-distill
 
-Read the codebase, surface domain behaviour, and emit a `.feature.md` plus a decision record. The hard part is the same as elicit: choosing the right level of abstraction. Code is **over-specified** — it tells you *how*; the spec must capture *what* and *why*.
+Read the codebase, surface domain behaviour, and emit a `.feature.md`. The hard part is the same as elicit: choosing the right level of abstraction. Code is **over-specified** — it tells you *how*; the spec must capture *what* and *why*.
 
 ## Output
 
 - Feature file: `specs/gherkin/<slug>.feature.md` — match `spezi/reference/feature-file.template.md`.
-- Decision record: `specs/gherkin/decisions/<YYYY-MM-DD>-<slug>-distill[-<n>].md` — base + Distill section per `spezi/reference/decision-record.template.md`.
 
 If the prospective slug collides with an existing `.feature.md`, ask: **rename** the new feature, **replace** the old one (requires `yes, replace`), or exit and run `/spezi-tend` instead.
 
@@ -110,7 +109,7 @@ User can also redirect: `That scenario is wrong — actually X happens` → redr
 
 On confirmation:
 - Write `.feature.md` with `status: complete`.
-- Write the decision record. Sections: base + `Cycles`, `## Accepted suggestions`, `## Rejected suggestions`, `## Deferred / open questions`. Append a `## Scope decisions` section recording what was excluded (legacy, infra, deprecated) per Step 1.
+- Any `defer` items from Step 6 become bullets in the spec's `## Open questions` section (omit the section entirely if empty). Excluded categories from Step 1 (legacy, infra, deprecated) belong under `## Boundaries → Out of scope`, not anywhere else.
 
 ## Common code-reading challenges
 
@@ -130,7 +129,7 @@ Distill complete. Generate tests for this spec via /spezi-propagate?
 Reply `yes` / `not now` / `never this session`.
 ```
 
-On `yes`, hand off with `{ seed: <slug> }`. Log outcome in *Session trail*.
+On `yes`, hand off with `{ seed: <slug> }`.
 
 ## What this skill does not do
 

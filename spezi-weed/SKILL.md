@@ -13,15 +13,14 @@ Pick one. Default to `check` if not specified.
 
 | Mode | What it does | Writes |
 |---|---|---|
-| `check` | Report divergences. No edits. | Decision record only. |
-| `update-spec` | Align the `.feature.md` to current code behaviour. | `.feature.md` (per `/update-spec` flow) + record. |
-| `update-code` | Align code to spec — surface guidance, never patches. | Decision record. Code edits are the user's. |
+| `check` | Report divergences. No edits. | Nothing. Report stays in chat. May propose appending unresolved items to the spec's `## Open questions`. |
+| `update-spec` | Align the `.feature.md` to current code behaviour. | `.feature.md` only. |
+| `update-code` | Align code to spec — surface guidance, never patches. | Nothing. Guidance is emitted to chat. |
 
 `check` is safe to run anywhere. `update-spec` writes only the feature file. `update-code` never edits code itself — it produces guidance blocks the user (or another agent) acts on.
 
 ## Output
 
-- Decision record: `specs/gherkin/decisions/<YYYY-MM-DD>-<slug>-weed[-<n>].md` — base + Weed section per `spezi/reference/decision-record.template.md`.
 - (`update-spec` only) updated `specs/gherkin/<slug>.feature.md` with refreshed `updated`.
 
 ## Boundaries
@@ -62,7 +61,7 @@ For each row that isn't a clean match:
 | **Spec bug** | Spec is wrong; code is correct. Resolve via `update-spec`. |
 | **Code bug** | Code is wrong; spec is correct. Resolve via `update-code` (guidance only). |
 | **Aspirational design** | Spec describes intent that wasn't built yet. Defer or `update-code`. |
-| **Intentional gap** | Spec deliberately silent on this code (out-of-scope, infrastructure, library). Confirm and record. |
+| **Intentional gap** | Spec deliberately silent on this code (out-of-scope, infrastructure, library). Confirm; no further action. |
 
 Confirm classification with the user before proceeding:
 
@@ -80,12 +79,17 @@ Reply `1: accept`, `1: reclassify <new class>`, `1: defer`. Silence = accept all
 
 ### `check`
 
-Report and exit. Write the decision record with:
-- Per-scenario alignment table.
-- Classification of each divergence.
-- A short next-step prompt: `Re-run with --update-spec or --update-code to resolve.`
+Report the alignment table and classifications in chat. End with: `Re-run with --update-spec or --update-code to resolve.`
 
-No file writes beyond the record.
+If any items are classified `aspirational` or remain ambiguous, ask:
+
+```
+Append the following to <slug>.feature.md → `## Open questions`?
+- <classification>: <one-line note>
+Reply `append` / `discard` / `pick: 1, 3` for a subset.
+```
+
+`append` is the only writing path in this mode; default on silence is `discard`.
 
 ### `update-spec`
 
@@ -93,9 +97,9 @@ For each `spec bug` (or `aspirational` reclassified to `spec bug`), invoke the s
 
 1. Confirm exit from read-only on `.feature.md` (one-line summary).
 2. Compose a section-level rewrite — the affected scenario(s), `## Boundaries`, or `## Invariants`. Replace the section in full; refresh `updated`.
-3. Flag any meaning-changing aspect with `accept` / `reject` / `defer` / `<amended>` buckets; silence = reject all.
+3. Flag any meaning-changing aspect with `accept` / `reject` / `defer` / `<amended>` buckets; silence = reject all. `defer` items go into the spec's `## Open questions` section.
 4. **One redraft cycle maximum.** If the user is not satisfied, suggest `/spezi-tend` for deeper rework.
-5. Persist the spec; append to the record under `## Spec updates`.
+5. Persist the spec.
 
 Never write to code in this mode.
 
@@ -112,7 +116,7 @@ Observed: code accepts tokens up to 7 days old (config: TOKEN_TTL_DAYS=7).
 Likely fix: change TOKEN_TTL_DAYS to 1, or rephrase the spec to 7 days.
 ```
 
-Persist the record with the per-scenario guidance blocks. Code changes are the user's responsibility.
+Guidance blocks are emitted to chat only. Code changes are the user's responsibility — copy the blocks into commit messages, issues, or hand them to another agent.
 
 ## Step 5 — Cross-entity / process-level checks
 
@@ -125,7 +129,7 @@ After per-scenario divergences, scan for higher-order gaps:
 ## Escape hatches
 
 - `/done` — current flag list is sufficient. Unanswered = `defer`.
-- `/abort` — exit. Persist the record with `Outcome: aborted` plus whatever was already classified.
+- `/abort` — exit immediately. Nothing is persisted.
 
 ## Library-spec divergences
 

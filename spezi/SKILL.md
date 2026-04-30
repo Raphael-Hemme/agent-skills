@@ -50,9 +50,8 @@ This catch-all does not double-fire when it dispatched to one of those skills. `
 specs/
 ├── gherkin/
 │   ├── <slug>.feature.md
-│   ├── lib/                       library specs (reusable integration patterns)
-│   │   └── <lib-slug>.feature.md
-│   └── decisions/<YYYY-MM-DD>-<slug>[-<type>].md
+│   └── lib/                       library specs (reusable integration patterns)
+│       └── <lib-slug>.feature.md
 └── allium/                        Allium-owned
 ```
 
@@ -78,5 +77,4 @@ Place the Spezi tree at `spezi/` (project) or `~/.claude/skills/spezi/` (user). 
 ## Reference files
 
 - `spezi/reference/feature-file.template.md` — `.feature.md` shape and rules.
-- `spezi/reference/decision-record.template.md` — record path convention and shape per session type.
 - `spezi/reference/allium-linking.md` — `allium:` block schema and the Allium availability probe.
